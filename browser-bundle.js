@@ -1,0 +1,1 @@
+WebtorrentApp = require('./index.js');
