@@ -6976,21 +6976,53 @@ var WebTorrent = require('webtorrent');
 var promisedRequest = require('./lib/promised-request.js');
 var Buffer = require('buffer/').Buffer;
 var localforage = require('localforage');
-var cache = {};
-function callScript(script){
+var Q = require('q');
+function launchApp(wtfapi, script){
     var f = eval(script);
-    f({
-
-    })
+    f(wtfapi)
 }
 
 module.exports = function(config){
-    var cache = {};
     var useCache = "boolean" === typeof config.cache ? config.cache : true;
+    var enableLogging = "boolean" === typeof config.log ? config.log : false;
+    var appFiles = ['version.txt', 'index.js'].concat(config.files || []);
+    var webpath = config.webpath || '';
+    var seedTimeoutMs = config.seedTimeout || 5000;
+    var appName = config.name || 'Just another WebTorretn app';
+
+    var promisedFiles = {};
+    appFiles.forEach(function(file){
+        promisedFiles[file] = Q.defer();
+    });
+
+    function log(){
+        if(enableLogging){
+            console.log.apply(console, arguments);
+        }
+    }
+
+    function requestText(filename){
+        return promisedFiles[filename].promise;
+    }
+
+    function requestScript(filename){
+
+    }
+
+    requestText('index.js').then(launchApp.bind(null, {
+        requestText: requestText
+    }));
+
     if(useCache){
-        localforage.getItem('webtorrentapp', function(err, c){
-            if(!err && 'object' == typeof c){
-                cache = c;
+        log("Checking cache");
+        localforage.getItem('webtorrentapp', function(err, cache){
+            if(!err && 'object' == typeof cache && cache){
+                Object.keys(cache).forEach(function(key){
+                    promisedFiles[key].resolve(cache[key])
+                });
+                log("Successfully restored from cache")
+            } else {
+                log("Restoring from cache failed")
             }
         });
     }
@@ -7010,16 +7042,55 @@ module.exports = function(config){
         launch app
      endif
      */
-    var webpath = config.webpath || '';
+
     var client = new WebTorrent();
-    var seedTimeoutMs = config.seedTimeout || 5000;
     var seedTimeout = setTimeout(function(){
+        log('Download timeout expired. Preparing to seed.');
+        var totalFiles = 0;
+        Object.keys(promisedFiles).forEach( function(key){
+            promisedFiles[key].resolve(promisedRequest(webpath + key));
+            promisedFiles[key].promise.then(function(){
+                totalFiles++;
+                log('Downloaded file ' + totalFiles + ' out of ' + appFiles.length);
+            })
+        });
+
+        Q.all(Object.keys(promisedFiles).map(function(key){
+            return promisedFiles[key].promise;
+        })).then(function(files){
+            log('All files have been downloaded. Attempting to seed.');
+            try{
+                client.seed( files.map(function(body, derp){
+                    var buffer = new Buffer(body);
+                    buffer.name = derp + '1';
+                    return buffer;
+                }), {
+                    name: appName
+                }, function(torrent){
+                    log('Successfully started seeding');
+                    log('Infohash:', torrent.infoHash);
+                    log('Magnet:', torrent.magnetURI);
+                });
+            }catch(e){
+                log('Oops!', e);
+            }
+        });
+
+
+
+        //Q.all([
+        //        promisedRequest(webpath + 'version.txt'),
+        //        promisedRequest(webpath + 'index.js')
+        //    ].concat( appFiles.map(function(file){ return promisedRequest(webpath + file) }))
+        //).then(function(){
+        //    console.log(arguments);
+        //});
         if(config.torrentId){
             client.remove(torrentId);
         }
-        promisedRequest(webpath + 'index.js').then(callScript).fail(function(err){
-            console.log(err);
-        });
+        //promisedRequest(webpath + 'index.js').then(launchApp).fail(function(err){
+        //    console.log(err);
+        //});
         //request('../euterpe/index.js', function(err, response, body){
         //    var indexjs = new Buffer(body);
         //    client.seed(indexjs, { name: 'Euterpe' }, function(torrent){
@@ -7031,7 +7102,7 @@ module.exports = function(config){
         //});
     }, seedTimeoutMs);
 };
-},{"./lib/promised-request.js":35,"buffer/":37,"localforage":47,"webtorrent":50}],35:[function(require,module,exports){
+},{"./lib/promised-request.js":35,"buffer/":37,"localforage":47,"q":49,"webtorrent":50}],35:[function(require,module,exports){
 var request = require('browser-request');
 var Q = require('q');
 module.exports = function(url){
