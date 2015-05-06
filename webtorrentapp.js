@@ -6977,6 +6977,8 @@ var promisedRequest = require('./lib/promised-request.js');
 var Buffer = require('buffer/').Buffer;
 var localforage = require('localforage');
 var Q = require('q');
+var debug = require('debug');
+var log = debug('webtorrentapp');
 function launchApp(wtfapi, script){
     var f = eval(script);
     f(wtfapi)
@@ -6984,7 +6986,6 @@ function launchApp(wtfapi, script){
 
 module.exports = function(config){
     var useCache = "boolean" === typeof config.cache ? config.cache : true;
-    var enableLogging = "boolean" === typeof config.log ? config.log : false;
     var appFiles = ['version.txt', 'index.js'].concat(config.files || []);
     var webpath = config.webpath || '';
     var seedTimeoutMs = config.seedTimeout || 5000;
@@ -6994,12 +6995,6 @@ module.exports = function(config){
     appFiles.forEach(function(file){
         promisedFiles[file] = Q.defer();
     });
-
-    function log(){
-        if(enableLogging){
-            console.log.apply(console, arguments);
-        }
-    }
 
     function requestText(filename){
         return promisedFiles[filename].promise;
@@ -7102,7 +7097,7 @@ module.exports = function(config){
         //});
     }, seedTimeoutMs);
 };
-},{"./lib/promised-request.js":35,"buffer/":37,"localforage":47,"q":49,"webtorrent":50}],35:[function(require,module,exports){
+},{"./lib/promised-request.js":35,"buffer/":37,"debug":41,"localforage":50,"q":52,"webtorrent":53}],35:[function(require,module,exports){
 var request = require('browser-request');
 var Q = require('q');
 module.exports = function(url){
@@ -7116,7 +7111,7 @@ module.exports = function(url){
     });
     return promise.promise;
 };
-},{"browser-request":36,"q":49}],36:[function(require,module,exports){
+},{"browser-request":36,"q":52}],36:[function(require,module,exports){
 // Browser Request
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -7621,6 +7616,507 @@ arguments[4][6][0].apply(exports,arguments)
 },{"dup":6}],40:[function(require,module,exports){
 arguments[4][7][0].apply(exports,arguments)
 },{"dup":7}],41:[function(require,module,exports){
+
+/**
+ * This is the web browser implementation of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = require('./debug');
+exports.log = log;
+exports.formatArgs = formatArgs;
+exports.save = save;
+exports.load = load;
+exports.useColors = useColors;
+
+/**
+ * Use chrome.storage.local if we are in an app
+ */
+
+var storage;
+
+if (typeof chrome !== 'undefined' && typeof chrome.storage !== 'undefined')
+  storage = chrome.storage.local;
+else
+  storage = localstorage();
+
+/**
+ * Colors.
+ */
+
+exports.colors = [
+  'lightseagreen',
+  'forestgreen',
+  'goldenrod',
+  'dodgerblue',
+  'darkorchid',
+  'crimson'
+];
+
+/**
+ * Currently only WebKit-based Web Inspectors, Firefox >= v31,
+ * and the Firebug extension (any Firefox version) are known
+ * to support "%c" CSS customizations.
+ *
+ * TODO: add a `localStorage` variable to explicitly enable/disable colors
+ */
+
+function useColors() {
+  // is webkit? http://stackoverflow.com/a/16459606/376773
+  return ('WebkitAppearance' in document.documentElement.style) ||
+    // is firebug? http://stackoverflow.com/a/398120/376773
+    (window.console && (console.firebug || (console.exception && console.table))) ||
+    // is firefox >= v31?
+    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
+    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
+}
+
+/**
+ * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
+ */
+
+exports.formatters.j = function(v) {
+  return JSON.stringify(v);
+};
+
+
+/**
+ * Colorize log arguments if enabled.
+ *
+ * @api public
+ */
+
+function formatArgs() {
+  var args = arguments;
+  var useColors = this.useColors;
+
+  args[0] = (useColors ? '%c' : '')
+    + this.namespace
+    + (useColors ? ' %c' : ' ')
+    + args[0]
+    + (useColors ? '%c ' : ' ')
+    + '+' + exports.humanize(this.diff);
+
+  if (!useColors) return args;
+
+  var c = 'color: ' + this.color;
+  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
+
+  // the final "%c" is somewhat tricky, because there could be other
+  // arguments passed either before or after the %c, so we need to
+  // figure out the correct index to insert the CSS into
+  var index = 0;
+  var lastC = 0;
+  args[0].replace(/%[a-z%]/g, function(match) {
+    if ('%%' === match) return;
+    index++;
+    if ('%c' === match) {
+      // we only are interested in the *last* %c
+      // (the user may have provided their own)
+      lastC = index;
+    }
+  });
+
+  args.splice(lastC, 0, c);
+  return args;
+}
+
+/**
+ * Invokes `console.log()` when available.
+ * No-op when `console.log` is not a "function".
+ *
+ * @api public
+ */
+
+function log() {
+  // this hackery is required for IE8/9, where
+  // the `console.log` function doesn't have 'apply'
+  return 'object' === typeof console
+    && console.log
+    && Function.prototype.apply.call(console.log, console, arguments);
+}
+
+/**
+ * Save `namespaces`.
+ *
+ * @param {String} namespaces
+ * @api private
+ */
+
+function save(namespaces) {
+  try {
+    if (null == namespaces) {
+      storage.removeItem('debug');
+    } else {
+      storage.debug = namespaces;
+    }
+  } catch(e) {}
+}
+
+/**
+ * Load `namespaces`.
+ *
+ * @return {String} returns the previously persisted debug modes
+ * @api private
+ */
+
+function load() {
+  var r;
+  try {
+    r = storage.debug;
+  } catch(e) {}
+  return r;
+}
+
+/**
+ * Enable namespaces listed in `localStorage.debug` initially.
+ */
+
+exports.enable(load());
+
+/**
+ * Localstorage attempts to return the localstorage.
+ *
+ * This is necessary because safari throws
+ * when a user disables cookies/localstorage
+ * and you attempt to access it.
+ *
+ * @return {LocalStorage}
+ * @api private
+ */
+
+function localstorage(){
+  try {
+    return window.localStorage;
+  } catch (e) {}
+}
+
+},{"./debug":42}],42:[function(require,module,exports){
+
+/**
+ * This is the common logic for both the Node.js and web browser
+ * implementations of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = debug;
+exports.coerce = coerce;
+exports.disable = disable;
+exports.enable = enable;
+exports.enabled = enabled;
+exports.humanize = require('ms');
+
+/**
+ * The currently active debug mode names, and names to skip.
+ */
+
+exports.names = [];
+exports.skips = [];
+
+/**
+ * Map of special "%n" handling functions, for the debug "format" argument.
+ *
+ * Valid key names are a single, lowercased letter, i.e. "n".
+ */
+
+exports.formatters = {};
+
+/**
+ * Previously assigned color.
+ */
+
+var prevColor = 0;
+
+/**
+ * Previous log timestamp.
+ */
+
+var prevTime;
+
+/**
+ * Select a color.
+ *
+ * @return {Number}
+ * @api private
+ */
+
+function selectColor() {
+  return exports.colors[prevColor++ % exports.colors.length];
+}
+
+/**
+ * Create a debugger with the given `namespace`.
+ *
+ * @param {String} namespace
+ * @return {Function}
+ * @api public
+ */
+
+function debug(namespace) {
+
+  // define the `disabled` version
+  function disabled() {
+  }
+  disabled.enabled = false;
+
+  // define the `enabled` version
+  function enabled() {
+
+    var self = enabled;
+
+    // set `diff` timestamp
+    var curr = +new Date();
+    var ms = curr - (prevTime || curr);
+    self.diff = ms;
+    self.prev = prevTime;
+    self.curr = curr;
+    prevTime = curr;
+
+    // add the `color` if not set
+    if (null == self.useColors) self.useColors = exports.useColors();
+    if (null == self.color && self.useColors) self.color = selectColor();
+
+    var args = Array.prototype.slice.call(arguments);
+
+    args[0] = exports.coerce(args[0]);
+
+    if ('string' !== typeof args[0]) {
+      // anything else let's inspect with %o
+      args = ['%o'].concat(args);
+    }
+
+    // apply any `formatters` transformations
+    var index = 0;
+    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
+      // if we encounter an escaped % then don't increase the array index
+      if (match === '%%') return match;
+      index++;
+      var formatter = exports.formatters[format];
+      if ('function' === typeof formatter) {
+        var val = args[index];
+        match = formatter.call(self, val);
+
+        // now we need to remove `args[index]` since it's inlined in the `format`
+        args.splice(index, 1);
+        index--;
+      }
+      return match;
+    });
+
+    if ('function' === typeof exports.formatArgs) {
+      args = exports.formatArgs.apply(self, args);
+    }
+    var logFn = enabled.log || exports.log || console.log.bind(console);
+    logFn.apply(self, args);
+  }
+  enabled.enabled = true;
+
+  var fn = exports.enabled(namespace) ? enabled : disabled;
+
+  fn.namespace = namespace;
+
+  return fn;
+}
+
+/**
+ * Enables a debug mode by namespaces. This can include modes
+ * separated by a colon and wildcards.
+ *
+ * @param {String} namespaces
+ * @api public
+ */
+
+function enable(namespaces) {
+  exports.save(namespaces);
+
+  var split = (namespaces || '').split(/[\s,]+/);
+  var len = split.length;
+
+  for (var i = 0; i < len; i++) {
+    if (!split[i]) continue; // ignore empty strings
+    namespaces = split[i].replace(/\*/g, '.*?');
+    if (namespaces[0] === '-') {
+      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
+    } else {
+      exports.names.push(new RegExp('^' + namespaces + '$'));
+    }
+  }
+}
+
+/**
+ * Disable debug output.
+ *
+ * @api public
+ */
+
+function disable() {
+  exports.enable('');
+}
+
+/**
+ * Returns true if the given mode name is enabled, false otherwise.
+ *
+ * @param {String} name
+ * @return {Boolean}
+ * @api public
+ */
+
+function enabled(name) {
+  var i, len;
+  for (i = 0, len = exports.skips.length; i < len; i++) {
+    if (exports.skips[i].test(name)) {
+      return false;
+    }
+  }
+  for (i = 0, len = exports.names.length; i < len; i++) {
+    if (exports.names[i].test(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Coerce `val`.
+ *
+ * @param {Mixed} val
+ * @return {Mixed}
+ * @api private
+ */
+
+function coerce(val) {
+  if (val instanceof Error) return val.stack || val.message;
+  return val;
+}
+
+},{"ms":43}],43:[function(require,module,exports){
+/**
+ * Helpers.
+ */
+
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
+
+/**
+ * Parse or format the given `val`.
+ *
+ * Options:
+ *
+ *  - `long` verbose formatting [false]
+ *
+ * @param {String|Number} val
+ * @param {Object} options
+ * @return {String|Number}
+ * @api public
+ */
+
+module.exports = function(val, options){
+  options = options || {};
+  if ('string' == typeof val) return parse(val);
+  return options.long
+    ? long(val)
+    : short(val);
+};
+
+/**
+ * Parse the given `str` and return milliseconds.
+ *
+ * @param {String} str
+ * @return {Number}
+ * @api private
+ */
+
+function parse(str) {
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str);
+  if (!match) return;
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
+  switch (type) {
+    case 'years':
+    case 'year':
+    case 'yrs':
+    case 'yr':
+    case 'y':
+      return n * y;
+    case 'days':
+    case 'day':
+    case 'd':
+      return n * d;
+    case 'hours':
+    case 'hour':
+    case 'hrs':
+    case 'hr':
+    case 'h':
+      return n * h;
+    case 'minutes':
+    case 'minute':
+    case 'mins':
+    case 'min':
+    case 'm':
+      return n * m;
+    case 'seconds':
+    case 'second':
+    case 'secs':
+    case 'sec':
+    case 's':
+      return n * s;
+    case 'milliseconds':
+    case 'millisecond':
+    case 'msecs':
+    case 'msec':
+    case 'ms':
+      return n;
+  }
+}
+
+/**
+ * Short format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function short(ms) {
+  if (ms >= d) return Math.round(ms / d) + 'd';
+  if (ms >= h) return Math.round(ms / h) + 'h';
+  if (ms >= m) return Math.round(ms / m) + 'm';
+  if (ms >= s) return Math.round(ms / s) + 's';
+  return ms + 'ms';
+}
+
+/**
+ * Long format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function long(ms) {
+  return plural(ms, d, 'day')
+    || plural(ms, h, 'hour')
+    || plural(ms, m, 'minute')
+    || plural(ms, s, 'second')
+    || ms + ' ms';
+}
+
+/**
+ * Pluralization helper.
+ */
+
+function plural(ms, n, name) {
+  if (ms < n) return;
+  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
+  return Math.ceil(ms / n) + ' ' + name + 's';
+}
+
+},{}],44:[function(require,module,exports){
 'use strict';
 
 var asap = require('asap')
@@ -7727,7 +8223,7 @@ function doResolve(fn, onFulfilled, onRejected) {
   }
 }
 
-},{"asap":43}],42:[function(require,module,exports){
+},{"asap":46}],45:[function(require,module,exports){
 'use strict';
 
 //This file contains then/promise specific extensions to the core promise API
@@ -7909,7 +8405,7 @@ Promise.prototype['catch'] = function (onRejected) {
   return this.then(null, onRejected);
 }
 
-},{"./core.js":41,"asap":43}],43:[function(require,module,exports){
+},{"./core.js":44,"asap":46}],46:[function(require,module,exports){
 (function (process){
 
 // Use the fastest possible means to execute a task in a future turn
@@ -8026,7 +8522,7 @@ module.exports = asap;
 
 
 }).call(this,require('_process'))
-},{"_process":12}],44:[function(require,module,exports){
+},{"_process":12}],47:[function(require,module,exports){
 // Some code originally from async_storage.js in
 // [Gaia](https://github.com/mozilla-b2g/gaia).
 (function() {
@@ -8441,7 +8937,7 @@ module.exports = asap;
     }
 }).call(window);
 
-},{"promise":42}],45:[function(require,module,exports){
+},{"promise":45}],48:[function(require,module,exports){
 // If IndexedDB isn't available, we'll fall back to localStorage.
 // Note that this will have considerable performance and storage
 // side-effects (all data will be serialized on save and only data that
@@ -8772,7 +9268,7 @@ module.exports = asap;
     }
 }).call(window);
 
-},{"./../utils/serializer":48,"promise":42}],46:[function(require,module,exports){
+},{"./../utils/serializer":51,"promise":45}],49:[function(require,module,exports){
 /*
  * Includes code from:
  *
@@ -9190,7 +9686,7 @@ module.exports = asap;
     }
 }).call(window);
 
-},{"./../utils/serializer":48,"promise":42}],47:[function(require,module,exports){
+},{"./../utils/serializer":51,"promise":45}],50:[function(require,module,exports){
 (function() {
     'use strict';
 
@@ -9612,7 +10108,7 @@ module.exports = asap;
     }
 }).call(window);
 
-},{"./drivers/indexeddb":44,"./drivers/localstorage":45,"./drivers/websql":46,"promise":42}],48:[function(require,module,exports){
+},{"./drivers/indexeddb":47,"./drivers/localstorage":48,"./drivers/websql":49,"promise":45}],51:[function(require,module,exports){
 (function() {
     'use strict';
 
@@ -9844,7 +10340,7 @@ module.exports = asap;
     }
 }).call(window);
 
-},{}],49:[function(require,module,exports){
+},{}],52:[function(require,module,exports){
 (function (process){
 // vim:ts=4:sts=4:sw=4:
 /*!
@@ -11878,7 +12374,7 @@ return Q;
 });
 
 }).call(this,require('_process'))
-},{"_process":12}],50:[function(require,module,exports){
+},{"_process":12}],53:[function(require,module,exports){
 (function (process,global,Buffer){
 // TODO: dhtPort and torrentPort should be consistent between restarts
 // TODO: peerId and nodeId should be consistent between restarts
@@ -12155,7 +12651,7 @@ WebTorrent.prototype.destroy = function (cb) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
-},{"./lib/fs-storage":3,"./lib/storage":54,"./lib/torrent":55,"./package.json":124,"_process":12,"bittorrent-dht/client":3,"buffer":4,"create-torrent":67,"debug":78,"events":8,"hat":85,"inherits":86,"load-ip-set":3,"parse-torrent":90,"run-parallel":101,"speedometer":104,"xtend":121,"zero-fill":123}],51:[function(require,module,exports){
+},{"./lib/fs-storage":3,"./lib/storage":57,"./lib/torrent":58,"./package.json":127,"_process":12,"bittorrent-dht/client":3,"buffer":4,"create-torrent":70,"debug":81,"events":8,"hat":88,"inherits":89,"load-ip-set":3,"parse-torrent":93,"run-parallel":104,"speedometer":107,"xtend":124,"zero-fill":126}],54:[function(require,module,exports){
 module.exports = FileStream
 
 var debug = require('debug')('webtorrent:file-stream')
@@ -12277,7 +12773,7 @@ FileStream.prototype.destroy = function () {
   self._destroyed = true
 }
 
-},{"./media-stream":52,"debug":78,"inherits":86,"path":11,"stream":28}],52:[function(require,module,exports){
+},{"./media-stream":55,"debug":81,"inherits":89,"path":11,"stream":28}],55:[function(require,module,exports){
 module.exports = MediaStream
 
 var debug = require('debug')('webtorrent:media-stream')
@@ -12350,7 +12846,7 @@ MediaStream.prototype._flow = function () {
   }
 }
 
-},{"debug":78,"inherits":86,"once":89,"stream":28}],53:[function(require,module,exports){
+},{"debug":81,"inherits":89,"once":92,"stream":28}],56:[function(require,module,exports){
 module.exports = RarityMap
 
 /**
@@ -12438,7 +12934,7 @@ RarityMap.prototype.getRarestPiece = function (pieceFilterFunc) {
   }
 }
 
-},{}],54:[function(require,module,exports){
+},{}],57:[function(require,module,exports){
 (function (process,global,Buffer){
 module.exports = Storage
 
@@ -13046,7 +13542,7 @@ Storage.prototype._checkDone = function () {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
-},{"./file-stream":51,"_process":12,"bitfield":57,"block-stream":66,"buffer":4,"debug":78,"dezalgo":81,"end-of-stream":84,"events":8,"inherits":86,"multistream":87,"once":89,"simple-sha1":102}],55:[function(require,module,exports){
+},{"./file-stream":54,"_process":12,"bitfield":60,"block-stream":69,"buffer":4,"debug":81,"dezalgo":84,"end-of-stream":87,"events":8,"inherits":89,"multistream":90,"once":92,"simple-sha1":105}],58:[function(require,module,exports){
 (function (process){
 module.exports = Torrent
 
@@ -14113,7 +14609,7 @@ function randomizedForEach (array, cb) {
 }
 
 }).call(this,require('_process'))
-},{"./rarity-map":53,"./server":3,"./storage":54,"_process":12,"addr-to-ip-port":56,"bittorrent-swarm":58,"create-torrent":67,"debug":78,"events":8,"fs":1,"inherits":86,"parse-torrent":90,"re-emitter":100,"run-parallel":101,"simple-get":3,"torrent-discovery":105,"ut_metadata":116,"ut_pex":3}],56:[function(require,module,exports){
+},{"./rarity-map":56,"./server":3,"./storage":57,"_process":12,"addr-to-ip-port":59,"bittorrent-swarm":61,"create-torrent":70,"debug":81,"events":8,"fs":1,"inherits":89,"parse-torrent":93,"re-emitter":103,"run-parallel":104,"simple-get":3,"torrent-discovery":108,"ut_metadata":119,"ut_pex":3}],59:[function(require,module,exports){
 var ADDR_RE = /^\[?([^\]]+)\]?:(\d+)$/ // ipv4/ipv6/hostname + port
 
 var cache = {}
@@ -14137,7 +14633,7 @@ module.exports.reset = function reset () {
   cache = {}
 }
 
-},{}],57:[function(require,module,exports){
+},{}],60:[function(require,module,exports){
 (function (Buffer){
 var Container = typeof Buffer !== "undefined" ? Buffer //in node, use buffers
 		: typeof Int8Array !== "undefined" ? Int8Array //in newer browsers, use webgl int8arrays
@@ -14202,7 +14698,7 @@ BitField.prototype._grow = function(length) {
 if(typeof module !== "undefined") module.exports = BitField;
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":4}],58:[function(require,module,exports){
+},{"buffer":4}],61:[function(require,module,exports){
 (function (process,Buffer){
 module.exports = Swarm
 
@@ -14534,7 +15030,7 @@ Swarm.prototype._validAddr = function (addr) {
 }
 
 }).call(this,require('_process'),require("buffer").Buffer)
-},{"./lib/peer":59,"./lib/tcp-pool":60,"_process":12,"addr-to-ip-port":3,"buffer":4,"debug":78,"dezalgo":81,"events":8,"inherits":86,"net":3,"speedometer":104}],59:[function(require,module,exports){
+},{"./lib/peer":62,"./lib/tcp-pool":63,"_process":12,"addr-to-ip-port":3,"buffer":4,"debug":81,"dezalgo":84,"events":8,"inherits":89,"net":3,"speedometer":107}],62:[function(require,module,exports){
 var Wire = require('bittorrent-protocol')
 
 var HANDSHAKE_TIMEOUT = 25000
@@ -14722,7 +15218,7 @@ Peer.prototype.destroy = function () {
   self.wire = null
 }
 
-},{"bittorrent-protocol":61}],60:[function(require,module,exports){
+},{"bittorrent-protocol":64}],63:[function(require,module,exports){
 (function (process){
 module.exports = TCPPool
 
@@ -14933,7 +15429,7 @@ TCPPool.prototype._onError = function (err) {
 }
 
 }).call(this,require('_process'))
-},{"./peer":59,"_process":12,"dezalgo":81,"net":3}],61:[function(require,module,exports){
+},{"./peer":62,"_process":12,"dezalgo":84,"net":3}],64:[function(require,module,exports){
 (function (Buffer){
 module.exports = Wire
 
@@ -15582,13 +16078,13 @@ function safeBdecode (buf) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"bencode":62,"bitfield":57,"buffer":4,"debug":78,"inherits":86,"speedometer":104,"stream":28,"xtend":121}],62:[function(require,module,exports){
+},{"bencode":65,"bitfield":60,"buffer":4,"debug":81,"inherits":89,"speedometer":107,"stream":28,"xtend":124}],65:[function(require,module,exports){
 module.exports = {
   encode: require( './lib/encode' ),
   decode: require( './lib/decode' )
 }
 
-},{"./lib/decode":63,"./lib/encode":65}],63:[function(require,module,exports){
+},{"./lib/decode":66,"./lib/encode":68}],66:[function(require,module,exports){
 (function (Buffer){
 var Dict = require("./dict")
 
@@ -15708,7 +16204,7 @@ decode.bytes = function() {
 module.exports = decode
 
 }).call(this,require("buffer").Buffer)
-},{"./dict":64,"buffer":4}],64:[function(require,module,exports){
+},{"./dict":67,"buffer":4}],67:[function(require,module,exports){
 var Dict = module.exports = function Dict() {
   Object.defineProperty(this, "_keys", {
     enumerable: false,
@@ -15726,7 +16222,7 @@ Dict.prototype.binarySet = function binarySet(key, value) {
   this[key] = value
 }
 
-},{}],65:[function(require,module,exports){
+},{}],68:[function(require,module,exports){
 (function (Buffer){
 /**
  * Encodes data in bencode.
@@ -15831,7 +16327,7 @@ encode.list = function( buffers, data ) {
 module.exports = encode
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":4}],66:[function(require,module,exports){
+},{"buffer":4}],69:[function(require,module,exports){
 (function (process,Buffer){
 // write data to it, and it'll emit data in 512 byte blocks.
 // if you .end() or .flush(), it'll emit whatever it's got,
@@ -16044,7 +16540,7 @@ BlockStream.prototype._emitChunk = function (flush) {
 }
 
 }).call(this,require('_process'),require("buffer").Buffer)
-},{"_process":12,"assert":2,"buffer":4,"inherits":86,"stream":28}],67:[function(require,module,exports){
+},{"_process":12,"assert":2,"buffer":4,"inherits":89,"stream":28}],70:[function(require,module,exports){
 (function (Buffer){
 /*global Blob, FileList */
 
@@ -16406,15 +16902,15 @@ function getStreamStream (readable, file) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"bencode":68,"block-stream":66,"buffer":4,"filestream/read":74,"flatten":75,"fs":1,"multistream":87,"once":89,"path":11,"piece-length":76,"run-parallel":101,"simple-sha1":102,"stream":28}],68:[function(require,module,exports){
-arguments[4][62][0].apply(exports,arguments)
-},{"./lib/decode":69,"./lib/encode":71,"dup":62}],69:[function(require,module,exports){
-arguments[4][63][0].apply(exports,arguments)
-},{"./dict":70,"buffer":4,"dup":63}],70:[function(require,module,exports){
-arguments[4][64][0].apply(exports,arguments)
-},{"dup":64}],71:[function(require,module,exports){
+},{"bencode":71,"block-stream":69,"buffer":4,"filestream/read":77,"flatten":78,"fs":1,"multistream":90,"once":92,"path":11,"piece-length":79,"run-parallel":104,"simple-sha1":105,"stream":28}],71:[function(require,module,exports){
 arguments[4][65][0].apply(exports,arguments)
-},{"buffer":4,"dup":65}],72:[function(require,module,exports){
+},{"./lib/decode":72,"./lib/encode":74,"dup":65}],72:[function(require,module,exports){
+arguments[4][66][0].apply(exports,arguments)
+},{"./dict":73,"buffer":4,"dup":66}],73:[function(require,module,exports){
+arguments[4][67][0].apply(exports,arguments)
+},{"dup":67}],74:[function(require,module,exports){
+arguments[4][68][0].apply(exports,arguments)
+},{"buffer":4,"dup":68}],75:[function(require,module,exports){
 (function (Buffer){
 /**
  * Convert a typed array to a Buffer without a copy
@@ -16449,7 +16945,7 @@ module.exports = function (arr) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":4,"is-typedarray":73}],73:[function(require,module,exports){
+},{"buffer":4,"is-typedarray":76}],76:[function(require,module,exports){
 module.exports      = isTypedArray
 isTypedArray.strict = isStrictTypedArray
 isTypedArray.loose  = isLooseTypedArray
@@ -16490,7 +16986,7 @@ function isLooseTypedArray(arr) {
   return names[toString.call(arr)]
 }
 
-},{}],74:[function(require,module,exports){
+},{}],77:[function(require,module,exports){
 var Readable = require('stream').Readable;
 var inherits = require('inherits');
 var reExtension = /^.*\.(\w+)$/;
@@ -16582,7 +17078,7 @@ FileReadStream.prototype._handleProgress = function(evt) {
   this.emit('readable');
 };
 
-},{"inherits":86,"stream":28,"typedarray-to-buffer":72}],75:[function(require,module,exports){
+},{"inherits":89,"stream":28,"typedarray-to-buffer":75}],78:[function(require,module,exports){
 module.exports = function flatten(list, depth) {
   depth = (typeof depth == 'number') ? depth : Infinity;
 
@@ -16600,7 +17096,7 @@ module.exports = function flatten(list, depth) {
   }
 };
 
-},{}],76:[function(require,module,exports){
+},{}],79:[function(require,module,exports){
 var closest = require('closest-to')
 
 // Create a range from 16kb–4mb
@@ -16615,7 +17111,7 @@ module.exports = function(size) {
   )
 }
 
-},{"closest-to":77}],77:[function(require,module,exports){
+},{"closest-to":80}],80:[function(require,module,exports){
 module.exports = function(target, numbers) {
   var closest = Infinity
   var difference = 0
@@ -16637,508 +17133,13 @@ module.exports = function(target, numbers) {
   return winner
 }
 
-},{}],78:[function(require,module,exports){
-
-/**
- * This is the web browser implementation of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = require('./debug');
-exports.log = log;
-exports.formatArgs = formatArgs;
-exports.save = save;
-exports.load = load;
-exports.useColors = useColors;
-
-/**
- * Use chrome.storage.local if we are in an app
- */
-
-var storage;
-
-if (typeof chrome !== 'undefined' && typeof chrome.storage !== 'undefined')
-  storage = chrome.storage.local;
-else
-  storage = localstorage();
-
-/**
- * Colors.
- */
-
-exports.colors = [
-  'lightseagreen',
-  'forestgreen',
-  'goldenrod',
-  'dodgerblue',
-  'darkorchid',
-  'crimson'
-];
-
-/**
- * Currently only WebKit-based Web Inspectors, Firefox >= v31,
- * and the Firebug extension (any Firefox version) are known
- * to support "%c" CSS customizations.
- *
- * TODO: add a `localStorage` variable to explicitly enable/disable colors
- */
-
-function useColors() {
-  // is webkit? http://stackoverflow.com/a/16459606/376773
-  return ('WebkitAppearance' in document.documentElement.style) ||
-    // is firebug? http://stackoverflow.com/a/398120/376773
-    (window.console && (console.firebug || (console.exception && console.table))) ||
-    // is firefox >= v31?
-    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
-}
-
-/**
- * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
- */
-
-exports.formatters.j = function(v) {
-  return JSON.stringify(v);
-};
-
-
-/**
- * Colorize log arguments if enabled.
- *
- * @api public
- */
-
-function formatArgs() {
-  var args = arguments;
-  var useColors = this.useColors;
-
-  args[0] = (useColors ? '%c' : '')
-    + this.namespace
-    + (useColors ? ' %c' : ' ')
-    + args[0]
-    + (useColors ? '%c ' : ' ')
-    + '+' + exports.humanize(this.diff);
-
-  if (!useColors) return args;
-
-  var c = 'color: ' + this.color;
-  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
-
-  // the final "%c" is somewhat tricky, because there could be other
-  // arguments passed either before or after the %c, so we need to
-  // figure out the correct index to insert the CSS into
-  var index = 0;
-  var lastC = 0;
-  args[0].replace(/%[a-z%]/g, function(match) {
-    if ('%%' === match) return;
-    index++;
-    if ('%c' === match) {
-      // we only are interested in the *last* %c
-      // (the user may have provided their own)
-      lastC = index;
-    }
-  });
-
-  args.splice(lastC, 0, c);
-  return args;
-}
-
-/**
- * Invokes `console.log()` when available.
- * No-op when `console.log` is not a "function".
- *
- * @api public
- */
-
-function log() {
-  // this hackery is required for IE8/9, where
-  // the `console.log` function doesn't have 'apply'
-  return 'object' === typeof console
-    && console.log
-    && Function.prototype.apply.call(console.log, console, arguments);
-}
-
-/**
- * Save `namespaces`.
- *
- * @param {String} namespaces
- * @api private
- */
-
-function save(namespaces) {
-  try {
-    if (null == namespaces) {
-      storage.removeItem('debug');
-    } else {
-      storage.debug = namespaces;
-    }
-  } catch(e) {}
-}
-
-/**
- * Load `namespaces`.
- *
- * @return {String} returns the previously persisted debug modes
- * @api private
- */
-
-function load() {
-  var r;
-  try {
-    r = storage.debug;
-  } catch(e) {}
-  return r;
-}
-
-/**
- * Enable namespaces listed in `localStorage.debug` initially.
- */
-
-exports.enable(load());
-
-/**
- * Localstorage attempts to return the localstorage.
- *
- * This is necessary because safari throws
- * when a user disables cookies/localstorage
- * and you attempt to access it.
- *
- * @return {LocalStorage}
- * @api private
- */
-
-function localstorage(){
-  try {
-    return window.localStorage;
-  } catch (e) {}
-}
-
-},{"./debug":79}],79:[function(require,module,exports){
-
-/**
- * This is the common logic for both the Node.js and web browser
- * implementations of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = debug;
-exports.coerce = coerce;
-exports.disable = disable;
-exports.enable = enable;
-exports.enabled = enabled;
-exports.humanize = require('ms');
-
-/**
- * The currently active debug mode names, and names to skip.
- */
-
-exports.names = [];
-exports.skips = [];
-
-/**
- * Map of special "%n" handling functions, for the debug "format" argument.
- *
- * Valid key names are a single, lowercased letter, i.e. "n".
- */
-
-exports.formatters = {};
-
-/**
- * Previously assigned color.
- */
-
-var prevColor = 0;
-
-/**
- * Previous log timestamp.
- */
-
-var prevTime;
-
-/**
- * Select a color.
- *
- * @return {Number}
- * @api private
- */
-
-function selectColor() {
-  return exports.colors[prevColor++ % exports.colors.length];
-}
-
-/**
- * Create a debugger with the given `namespace`.
- *
- * @param {String} namespace
- * @return {Function}
- * @api public
- */
-
-function debug(namespace) {
-
-  // define the `disabled` version
-  function disabled() {
-  }
-  disabled.enabled = false;
-
-  // define the `enabled` version
-  function enabled() {
-
-    var self = enabled;
-
-    // set `diff` timestamp
-    var curr = +new Date();
-    var ms = curr - (prevTime || curr);
-    self.diff = ms;
-    self.prev = prevTime;
-    self.curr = curr;
-    prevTime = curr;
-
-    // add the `color` if not set
-    if (null == self.useColors) self.useColors = exports.useColors();
-    if (null == self.color && self.useColors) self.color = selectColor();
-
-    var args = Array.prototype.slice.call(arguments);
-
-    args[0] = exports.coerce(args[0]);
-
-    if ('string' !== typeof args[0]) {
-      // anything else let's inspect with %o
-      args = ['%o'].concat(args);
-    }
-
-    // apply any `formatters` transformations
-    var index = 0;
-    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
-      // if we encounter an escaped % then don't increase the array index
-      if (match === '%%') return match;
-      index++;
-      var formatter = exports.formatters[format];
-      if ('function' === typeof formatter) {
-        var val = args[index];
-        match = formatter.call(self, val);
-
-        // now we need to remove `args[index]` since it's inlined in the `format`
-        args.splice(index, 1);
-        index--;
-      }
-      return match;
-    });
-
-    if ('function' === typeof exports.formatArgs) {
-      args = exports.formatArgs.apply(self, args);
-    }
-    var logFn = enabled.log || exports.log || console.log.bind(console);
-    logFn.apply(self, args);
-  }
-  enabled.enabled = true;
-
-  var fn = exports.enabled(namespace) ? enabled : disabled;
-
-  fn.namespace = namespace;
-
-  return fn;
-}
-
-/**
- * Enables a debug mode by namespaces. This can include modes
- * separated by a colon and wildcards.
- *
- * @param {String} namespaces
- * @api public
- */
-
-function enable(namespaces) {
-  exports.save(namespaces);
-
-  var split = (namespaces || '').split(/[\s,]+/);
-  var len = split.length;
-
-  for (var i = 0; i < len; i++) {
-    if (!split[i]) continue; // ignore empty strings
-    namespaces = split[i].replace(/\*/g, '.*?');
-    if (namespaces[0] === '-') {
-      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
-    } else {
-      exports.names.push(new RegExp('^' + namespaces + '$'));
-    }
-  }
-}
-
-/**
- * Disable debug output.
- *
- * @api public
- */
-
-function disable() {
-  exports.enable('');
-}
-
-/**
- * Returns true if the given mode name is enabled, false otherwise.
- *
- * @param {String} name
- * @return {Boolean}
- * @api public
- */
-
-function enabled(name) {
-  var i, len;
-  for (i = 0, len = exports.skips.length; i < len; i++) {
-    if (exports.skips[i].test(name)) {
-      return false;
-    }
-  }
-  for (i = 0, len = exports.names.length; i < len; i++) {
-    if (exports.names[i].test(name)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Coerce `val`.
- *
- * @param {Mixed} val
- * @return {Mixed}
- * @api private
- */
-
-function coerce(val) {
-  if (val instanceof Error) return val.stack || val.message;
-  return val;
-}
-
-},{"ms":80}],80:[function(require,module,exports){
-/**
- * Helpers.
- */
-
-var s = 1000;
-var m = s * 60;
-var h = m * 60;
-var d = h * 24;
-var y = d * 365.25;
-
-/**
- * Parse or format the given `val`.
- *
- * Options:
- *
- *  - `long` verbose formatting [false]
- *
- * @param {String|Number} val
- * @param {Object} options
- * @return {String|Number}
- * @api public
- */
-
-module.exports = function(val, options){
-  options = options || {};
-  if ('string' == typeof val) return parse(val);
-  return options.long
-    ? long(val)
-    : short(val);
-};
-
-/**
- * Parse the given `str` and return milliseconds.
- *
- * @param {String} str
- * @return {Number}
- * @api private
- */
-
-function parse(str) {
-  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str);
-  if (!match) return;
-  var n = parseFloat(match[1]);
-  var type = (match[2] || 'ms').toLowerCase();
-  switch (type) {
-    case 'years':
-    case 'year':
-    case 'yrs':
-    case 'yr':
-    case 'y':
-      return n * y;
-    case 'days':
-    case 'day':
-    case 'd':
-      return n * d;
-    case 'hours':
-    case 'hour':
-    case 'hrs':
-    case 'hr':
-    case 'h':
-      return n * h;
-    case 'minutes':
-    case 'minute':
-    case 'mins':
-    case 'min':
-    case 'm':
-      return n * m;
-    case 'seconds':
-    case 'second':
-    case 'secs':
-    case 'sec':
-    case 's':
-      return n * s;
-    case 'milliseconds':
-    case 'millisecond':
-    case 'msecs':
-    case 'msec':
-    case 'ms':
-      return n;
-  }
-}
-
-/**
- * Short format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function short(ms) {
-  if (ms >= d) return Math.round(ms / d) + 'd';
-  if (ms >= h) return Math.round(ms / h) + 'h';
-  if (ms >= m) return Math.round(ms / m) + 'm';
-  if (ms >= s) return Math.round(ms / s) + 's';
-  return ms + 'ms';
-}
-
-/**
- * Long format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function long(ms) {
-  return plural(ms, d, 'day')
-    || plural(ms, h, 'hour')
-    || plural(ms, m, 'minute')
-    || plural(ms, s, 'second')
-    || ms + ' ms';
-}
-
-/**
- * Pluralization helper.
- */
-
-function plural(ms, n, name) {
-  if (ms < n) return;
-  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
-  return Math.ceil(ms / n) + ' ' + name + 's';
-}
-
 },{}],81:[function(require,module,exports){
+arguments[4][41][0].apply(exports,arguments)
+},{"./debug":82,"dup":41}],82:[function(require,module,exports){
+arguments[4][42][0].apply(exports,arguments)
+},{"dup":42,"ms":83}],83:[function(require,module,exports){
+arguments[4][43][0].apply(exports,arguments)
+},{"dup":43}],84:[function(require,module,exports){
 var wrappy = require('wrappy')
 module.exports = wrappy(dezalgo)
 
@@ -17162,9 +17163,9 @@ function dezalgo (cb) {
   }
 }
 
-},{"asap":82,"wrappy":83}],82:[function(require,module,exports){
-arguments[4][43][0].apply(exports,arguments)
-},{"_process":12,"dup":43}],83:[function(require,module,exports){
+},{"asap":85,"wrappy":86}],85:[function(require,module,exports){
+arguments[4][46][0].apply(exports,arguments)
+},{"_process":12,"dup":46}],86:[function(require,module,exports){
 // Returns a wrapper function that returns a wrapped callback
 // The wrapper function should do some stuff, and return a
 // presumably different callback function.
@@ -17199,7 +17200,7 @@ function wrappy (fn, cb) {
   }
 }
 
-},{}],84:[function(require,module,exports){
+},{}],87:[function(require,module,exports){
 var once = require('once');
 
 var noop = function() {};
@@ -17283,7 +17284,7 @@ var eos = function(stream, opts, callback) {
 };
 
 module.exports = eos;
-},{"once":89}],85:[function(require,module,exports){
+},{"once":92}],88:[function(require,module,exports){
 var hat = module.exports = function (bits, base) {
     if (!base) base = 16;
     if (bits === undefined) bits = 128;
@@ -17347,9 +17348,9 @@ hat.rack = function (bits, base, expandBy) {
     return fn;
 };
 
-},{}],86:[function(require,module,exports){
+},{}],89:[function(require,module,exports){
 arguments[4][9][0].apply(exports,arguments)
-},{"dup":9}],87:[function(require,module,exports){
+},{"dup":9}],90:[function(require,module,exports){
 module.exports = MultiStream
 
 var inherits = require('inherits')
@@ -17457,9 +17458,9 @@ function toStreams2 (s) {
   return wrap
 }
 
-},{"inherits":86,"stream":28}],88:[function(require,module,exports){
-arguments[4][83][0].apply(exports,arguments)
-},{"dup":83}],89:[function(require,module,exports){
+},{"inherits":89,"stream":28}],91:[function(require,module,exports){
+arguments[4][86][0].apply(exports,arguments)
+},{"dup":86}],92:[function(require,module,exports){
 var wrappy = require('wrappy')
 module.exports = wrappy(once)
 
@@ -17482,7 +17483,7 @@ function once (fn) {
   return f
 }
 
-},{"wrappy":88}],90:[function(require,module,exports){
+},{"wrappy":91}],93:[function(require,module,exports){
 (function (Buffer){
 var magnet = require('magnet-uri')
 var parseTorrentFile = require('parse-torrent-file')
@@ -17518,7 +17519,7 @@ module.exports.toMagnetURI = magnet.encode
 module.exports.toTorrentFile = parseTorrentFile.encode
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":4,"magnet-uri":91,"parse-torrent-file":95}],91:[function(require,module,exports){
+},{"buffer":4,"magnet-uri":94,"parse-torrent-file":98}],94:[function(require,module,exports){
 (function (Buffer){
 module.exports = magnetURIDecode
 module.exports.decode = magnetURIDecode
@@ -17652,9 +17653,9 @@ function magnetURIEncode (obj) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":4,"flatten":92,"thirty-two":93,"xtend":121}],92:[function(require,module,exports){
-arguments[4][75][0].apply(exports,arguments)
-},{"dup":75}],93:[function(require,module,exports){
+},{"buffer":4,"flatten":95,"thirty-two":96,"xtend":124}],95:[function(require,module,exports){
+arguments[4][78][0].apply(exports,arguments)
+},{"dup":78}],96:[function(require,module,exports){
 /*                                                                              
 Copyright (c) 2011, Chris Umbel
 
@@ -17682,7 +17683,7 @@ var base32 = require('./thirty-two');
 exports.encode = base32.encode;
 exports.decode = base32.decode;
 
-},{"./thirty-two":94}],94:[function(require,module,exports){
+},{"./thirty-two":97}],97:[function(require,module,exports){
 (function (Buffer){
 /*                                                                              
 Copyright (c) 2011, Chris Umbel
@@ -17811,7 +17812,7 @@ exports.decode = function(encoded) {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":4}],95:[function(require,module,exports){
+},{"buffer":4}],98:[function(require,module,exports){
 (function (Buffer){
 module.exports = decodeTorrentFile
 module.exports.decode = decodeTorrentFile
@@ -17960,15 +17961,15 @@ function ensure (bool, fieldName) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"bencode":96,"buffer":4,"path":11,"simple-sha1":102}],96:[function(require,module,exports){
-arguments[4][62][0].apply(exports,arguments)
-},{"./lib/decode":97,"./lib/encode":99,"dup":62}],97:[function(require,module,exports){
-arguments[4][63][0].apply(exports,arguments)
-},{"./dict":98,"buffer":4,"dup":63}],98:[function(require,module,exports){
-arguments[4][64][0].apply(exports,arguments)
-},{"dup":64}],99:[function(require,module,exports){
+},{"bencode":99,"buffer":4,"path":11,"simple-sha1":105}],99:[function(require,module,exports){
 arguments[4][65][0].apply(exports,arguments)
-},{"buffer":4,"dup":65}],100:[function(require,module,exports){
+},{"./lib/decode":100,"./lib/encode":102,"dup":65}],100:[function(require,module,exports){
+arguments[4][66][0].apply(exports,arguments)
+},{"./dict":101,"buffer":4,"dup":66}],101:[function(require,module,exports){
+arguments[4][67][0].apply(exports,arguments)
+},{"dup":67}],102:[function(require,module,exports){
+arguments[4][68][0].apply(exports,arguments)
+},{"buffer":4,"dup":68}],103:[function(require,module,exports){
 module.exports = reemit
 module.exports.filter = filter
 
@@ -18001,7 +18002,7 @@ function filter (source, events) {
   return emitter
 }
 
-},{"events":8}],101:[function(require,module,exports){
+},{"events":8}],104:[function(require,module,exports){
 var dezalgo = require('dezalgo')
 
 module.exports = function (tasks, cb) {
@@ -18041,7 +18042,7 @@ module.exports = function (tasks, cb) {
   }
 }
 
-},{"dezalgo":81}],102:[function(require,module,exports){
+},{"dezalgo":84}],105:[function(require,module,exports){
 var Rusha = require('rusha')
 
 var rusha = new Rusha
@@ -18100,7 +18101,7 @@ function hex (buf) {
 module.exports = sha1
 module.exports.sync = sha1sync
 
-},{"rusha":103}],103:[function(require,module,exports){
+},{"rusha":106}],106:[function(require,module,exports){
 (function (global){
 /*
  * Rusha, a JavaScript implementation of the Secure Hash Algorithm, SHA-1,
@@ -18521,7 +18522,7 @@ module.exports.sync = sha1sync
     }
 }());
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],104:[function(require,module,exports){
+},{}],107:[function(require,module,exports){
 var tick = 1
 var maxTick = 65535
 var resolution = 4
@@ -18557,7 +18558,7 @@ module.exports = function(seconds) {
     return buffer.length < resolution ? top : (top - btm) * resolution / buffer.length
   }
 }
-},{}],105:[function(require,module,exports){
+},{}],108:[function(require,module,exports){
 (function (process){
 module.exports = Discovery
 
@@ -18676,7 +18677,7 @@ Discovery.prototype._dhtLookupAndAnnounce = function () {
 }
 
 }).call(this,require('_process'))
-},{"_process":12,"bittorrent-dht/client":3,"bittorrent-tracker/client":106,"debug":78,"events":8,"inherits":86,"re-emitter":100,"xtend/mutable":122}],106:[function(require,module,exports){
+},{"_process":12,"bittorrent-dht/client":3,"bittorrent-tracker/client":109,"debug":81,"events":8,"inherits":89,"re-emitter":103,"xtend/mutable":125}],109:[function(require,module,exports){
 (function (Buffer){
 module.exports = Client
 
@@ -18927,7 +18928,7 @@ Client.prototype._defaultAnnounceOpts = function (opts) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"./lib/common":108,"./lib/http-tracker":3,"./lib/udp-tracker":3,"./lib/websocket-tracker":109,"buffer":4,"debug":78,"events":8,"inherits":86,"once":89,"url":30}],107:[function(require,module,exports){
+},{"./lib/common":111,"./lib/http-tracker":3,"./lib/udp-tracker":3,"./lib/websocket-tracker":112,"buffer":4,"debug":81,"events":8,"inherits":89,"once":92,"url":30}],110:[function(require,module,exports){
 (function (Buffer){
 /**
  * Functions/constants needed by both the client and server (but only in node).
@@ -18995,7 +18996,7 @@ exports.querystringStringify = function (obj) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":4,"querystring":16}],108:[function(require,module,exports){
+},{"buffer":4,"querystring":16}],111:[function(require,module,exports){
 (function (Buffer){
 /**
  * Functions/constants needed by both the client and server.
@@ -19020,7 +19021,7 @@ var config = require('./common-node')
 extend(exports, config)
 
 }).call(this,require("buffer").Buffer)
-},{"./common-node":107,"buffer":4,"xtend/mutable":122}],109:[function(require,module,exports){
+},{"./common-node":110,"buffer":4,"xtend/mutable":125}],112:[function(require,module,exports){
 // TODO: destroy the websocket
 
 module.exports = WebSocketTracker
@@ -19223,7 +19224,7 @@ WebSocketTracker.prototype._generateOffers = function (numWant, cb) {
   }
 }
 
-},{"./common":108,"debug":78,"events":8,"hat":85,"inherits":86,"simple-peer":110,"simple-websocket":113}],110:[function(require,module,exports){
+},{"./common":111,"debug":81,"events":8,"hat":88,"inherits":89,"simple-peer":113,"simple-websocket":116}],113:[function(require,module,exports){
 (function (Buffer){
 /* global Blob */
 
@@ -19709,11 +19710,11 @@ function speedHack (obj) {
 function noop () {}
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":4,"debug":78,"hat":85,"inherits":86,"is-typedarray":111,"once":89,"stream":28,"typedarray-to-buffer":112,"xtend/mutable":122}],111:[function(require,module,exports){
-arguments[4][73][0].apply(exports,arguments)
-},{"dup":73}],112:[function(require,module,exports){
-arguments[4][72][0].apply(exports,arguments)
-},{"buffer":4,"dup":72,"is-typedarray":111}],113:[function(require,module,exports){
+},{"buffer":4,"debug":81,"hat":88,"inherits":89,"is-typedarray":114,"once":92,"stream":28,"typedarray-to-buffer":115,"xtend/mutable":125}],114:[function(require,module,exports){
+arguments[4][76][0].apply(exports,arguments)
+},{"dup":76}],115:[function(require,module,exports){
+arguments[4][75][0].apply(exports,arguments)
+},{"buffer":4,"dup":75,"is-typedarray":114}],116:[function(require,module,exports){
 (function (Buffer){
 /* global Blob */
 
@@ -19900,11 +19901,11 @@ Socket.prototype._onError = function () {
 function noop () {}
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":4,"debug":78,"inherits":86,"is-typedarray":114,"stream":28,"typedarray-to-buffer":115,"ws":3}],114:[function(require,module,exports){
-arguments[4][73][0].apply(exports,arguments)
-},{"dup":73}],115:[function(require,module,exports){
-arguments[4][72][0].apply(exports,arguments)
-},{"buffer":4,"dup":72,"is-typedarray":114}],116:[function(require,module,exports){
+},{"buffer":4,"debug":81,"inherits":89,"is-typedarray":117,"stream":28,"typedarray-to-buffer":118,"ws":3}],117:[function(require,module,exports){
+arguments[4][76][0].apply(exports,arguments)
+},{"dup":76}],118:[function(require,module,exports){
+arguments[4][75][0].apply(exports,arguments)
+},{"buffer":4,"dup":75,"is-typedarray":117}],119:[function(require,module,exports){
 (function (Buffer){
 var bencode = require('bencode')
 var BitField = require('bitfield')
@@ -20148,15 +20149,15 @@ module.exports = function (metadata) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"bencode":117,"bitfield":57,"buffer":4,"events":8,"inherits":86,"simple-sha1":102}],117:[function(require,module,exports){
-arguments[4][62][0].apply(exports,arguments)
-},{"./lib/decode":118,"./lib/encode":120,"dup":62}],118:[function(require,module,exports){
-arguments[4][63][0].apply(exports,arguments)
-},{"./dict":119,"buffer":4,"dup":63}],119:[function(require,module,exports){
-arguments[4][64][0].apply(exports,arguments)
-},{"dup":64}],120:[function(require,module,exports){
+},{"bencode":120,"bitfield":60,"buffer":4,"events":8,"inherits":89,"simple-sha1":105}],120:[function(require,module,exports){
 arguments[4][65][0].apply(exports,arguments)
-},{"buffer":4,"dup":65}],121:[function(require,module,exports){
+},{"./lib/decode":121,"./lib/encode":123,"dup":65}],121:[function(require,module,exports){
+arguments[4][66][0].apply(exports,arguments)
+},{"./dict":122,"buffer":4,"dup":66}],122:[function(require,module,exports){
+arguments[4][67][0].apply(exports,arguments)
+},{"dup":67}],123:[function(require,module,exports){
+arguments[4][68][0].apply(exports,arguments)
+},{"buffer":4,"dup":68}],124:[function(require,module,exports){
 module.exports = extend
 
 function extend() {
@@ -20175,7 +20176,7 @@ function extend() {
     return target
 }
 
-},{}],122:[function(require,module,exports){
+},{}],125:[function(require,module,exports){
 module.exports = extend
 
 function extend(target) {
@@ -20192,7 +20193,7 @@ function extend(target) {
     return target
 }
 
-},{}],123:[function(require,module,exports){
+},{}],126:[function(require,module,exports){
 /**
  * Given a number, return a zero-filled string.
  * From http://stackoverflow.com/questions/1267283/
@@ -20212,7 +20213,7 @@ module.exports = function zeroFill (width, number, pad) {
   return number + ''
 }
 
-},{}],124:[function(require,module,exports){
+},{}],127:[function(require,module,exports){
 module.exports={
   "name": "webtorrent",
   "description": "Streaming torrent client",

@@ -14,6 +14,7 @@
   "dependencies": {
     "browser-request": "^0.3.3",
     "buffer": "^3.2.2",
+    "debug": "^2.1.3",
     "localforage": "^1.2.2",
     "q": "^1.3.0",
     "webpack": "^1.8.11",

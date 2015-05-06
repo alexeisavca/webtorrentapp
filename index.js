@@ -3,6 +3,8 @@ var promisedRequest = require('./lib/promised-request.js');
 var Buffer = require('buffer/').Buffer;
 var localforage = require('localforage');
 var Q = require('q');
+var debug = require('debug');
+var log = debug('webtorrentapp');
 function launchApp(wtfapi, script){
     var f = eval(script);
     f(wtfapi)
@@ -10,7 +12,6 @@ function launchApp(wtfapi, script){
 
 module.exports = function(config){
     var useCache = "boolean" === typeof config.cache ? config.cache : true;
-    var enableLogging = "boolean" === typeof config.log ? config.log : false;
     var appFiles = ['version.txt', 'index.js'].concat(config.files || []);
     var webpath = config.webpath || '';
     var seedTimeoutMs = config.seedTimeout || 5000;
@@ -20,12 +21,6 @@ module.exports = function(config){
     appFiles.forEach(function(file){
         promisedFiles[file] = Q.defer();
     });
-
-    function log(){
-        if(enableLogging){
-            console.log.apply(console, arguments);
-        }
-    }
 
     function requestText(filename){
         return promisedFiles[filename].promise;
