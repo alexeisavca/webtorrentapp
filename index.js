@@ -89,9 +89,7 @@ module.exports = function(config){
                 }), {
                     name: appName
                 }, function(torrent){
-                    log('Successfully started seeding');
-                    log('Infohash:', torrent.infoHash);
-                    log('Magnet:', torrent.magnetURI);
+                    log('Successfully started seeding. Infohash: %c%s %cMagnet: %c%s', 'color: blue', torrent.infoHash, 'color:black', 'color:blue', torrent.magnetURI);
                 });
             }catch(e){
                 log('Oops!', e);
