@@ -7041,23 +7041,24 @@ module.exports = function(config){
     var client = new WebTorrent();
     var seedTimeout = setTimeout(function(){
         log('Download timeout expired. Preparing to seed.');
+        var fileNames = Object.keys(promisedFiles);
         var totalFiles = 0;
-        Object.keys(promisedFiles).forEach( function(key){
+        fileNames.forEach( function(key){
             promisedFiles[key].resolve(promisedRequest(webpath + key));
             promisedFiles[key].promise.then(function(){
                 totalFiles++;
-                log('Downloaded file ' + totalFiles + ' out of ' + appFiles.length);
+                log('Downloaded file ' + totalFiles + ' out of ' + appFiles.length, key);
             })
         });
 
-        Q.all(Object.keys(promisedFiles).map(function(key){
+        Q.all(fileNames.map(function(key){
             return promisedFiles[key].promise;
         })).then(function(files){
             log('All files have been downloaded. Attempting to seed.');
             try{
-                client.seed( files.map(function(body, derp){
+                client.seed( files.map(function(body, index){
                     var buffer = new Buffer(body);
-                    buffer.name = derp + '1';
+                    buffer.name = fileNames[index];
                     return buffer;
                 }), {
                     name: appName
