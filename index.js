@@ -95,30 +95,5 @@ module.exports = function(config){
                 log('Oops!', e);
             }
         });
-
-
-
-        //Q.all([
-        //        promisedRequest(webpath + 'version.txt'),
-        //        promisedRequest(webpath + 'index.js')
-        //    ].concat( appFiles.map(function(file){ return promisedRequest(webpath + file) }))
-        //).then(function(){
-        //    console.log(arguments);
-        //});
-        if(config.torrentId){
-            client.remove(torrentId);
-        }
-        //promisedRequest(webpath + 'index.js').then(launchApp).fail(function(err){
-        //    console.log(err);
-        //});
-        //request('../euterpe/index.js', function(err, response, body){
-        //    var indexjs = new Buffer(body);
-        //    client.seed(indexjs, { name: 'Euterpe' }, function(torrent){
-        //        console.log(torrent.files)
-        //        document.getElementById('status').innerHTML = 'Seeding!';
-        //        console.log('Seeding started!', torrent.infoHash);
-        //        launchEuterpeTorrent(torrent);
-        //    });
-        //});
     }, seedTimeoutMs);
 };
