@@ -11,10 +11,10 @@ function extractModuleExports(script){
 }
 
 module.exports = function(config){
-    var appFiles = ['version.txt', 'index.js'].concat(config.files || []);
+    var appFiles = ['package.json', 'index.js'].concat(config.files || []);
     var appMainFunc = config.mainFunc || 'webtorrentApp';
-    var cacheableFiles = ['version.txt', 'index.js'].concat(config.cache || []);
-    var webpath = config.webpath || '';
+    var cacheableFiles = ['package.json', 'index.js'].concat(config.cache || []);
+    var path = config.path || '';
     var seedTimeoutMs = config.seedTimeout || 5000;
     var appName = config.name || 'Just another WebTorrent app';
 
@@ -70,21 +70,20 @@ module.exports = function(config){
     }).catch(log.bind(log, "Restoring from cache failed"));
 
 
-    function isCacheOutdated(versionPromise){
+    function isCacheOutdated(packageJsonPromise){
         var deferred = Q.defer();
-        Q.all(localforage.getItem(appName), versionPromise).then(function(results){
-            var currentVersion = parseFloat(results[0]['version.txt']);
-            var maybeNewer = parseFloat(versionPromise);
-            deferred.resolve(maybeNewer > currentVersion);
+        Q.all(localforage.getItem(appName), packageJsonPromise).then(function(results){
+            var currentPackageJson = eval(results[0]['package.json']);
+            var currentVersion = parseFloat(currentPackageJson.version);
+            var maybeNewerPackageJson = eval(results[1]);
+            var maybeNewerVersion = parseFloat(maybeNewerPackageJson.version);
+            deferred.resolve(maybeNewerVersion > currentVersion);
         }).fail(function(){
             deferred.resolve(true)
         });
         return deferred.promise;
     }
 
-    function updateCache(filePromises){
-        Q.all(requestText('version.txt'), filePromises['version.txt'])
-    }
 
     var client = new WebTorrent();
 
@@ -94,15 +93,15 @@ module.exports = function(config){
         }
         torrentPromise = null;
         log('Preparing to seed.');
-        isCacheOutdated(promisedRequest(webpath + 'version.txt')).then(function(outdated){
+        isCacheOutdated(promisedRequest(path + 'package.json')).then(function(outdated){
             if(outdated){
-
+                log('will update');
             }
         });
         var fileNames = Object.keys(promisedFiles);
         var totalFiles = 0;
         fileNames.forEach( function(key){
-            promisedFiles[key].resolve(promisedRequest(webpath + key));
+            promisedFiles[key].resolve(promisedRequest(path + key));
             promisedFiles[key].promise.then(function(){
                 totalFiles++;
                 log('Downloaded file ' + totalFiles + ' out of ' + appFiles.length, key);
