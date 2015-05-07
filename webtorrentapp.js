@@ -6981,9 +6981,7 @@ var debug = require('debug');
 var log = debug('webtorrentapp');
 
 function extractModuleExports(script){
-    var module = {};
-    eval(script);
-    return module.exports;
+    return eval.call(window, '(function(module){' + script + ';return module.exports})({})');
 }
 
 module.exports = function(config){
