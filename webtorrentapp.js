@@ -7045,11 +7045,12 @@ module.exports = function(config){
 
     function isCacheOutdated(packageJsonPromise){
         var deferred = Q.defer();
-        Q.all(localforage.getItem(appName), packageJsonPromise).then(function(results){
-            var currentPackageJson = eval(results[0]['package.json']);
+        Q.all([localforage.getItem(appName), packageJsonPromise]).then(function(results){
+            var currentPackageJson = JSON.parse(results[0]['package.json']);
             var currentVersion = parseFloat(currentPackageJson.version);
-            var maybeNewerPackageJson = eval(results[1]);
+            var maybeNewerPackageJson = JSON.parse(results[1]);
             var maybeNewerVersion = parseFloat(maybeNewerPackageJson.version);
+
             deferred.resolve(maybeNewerVersion > currentVersion);
         }).fail(function(){
             deferred.resolve(true)
@@ -7068,9 +7069,9 @@ module.exports = function(config){
         Q.all(cacheFiles.map(function(name){
             return filePromises[name];
         })).then(function(){
-                localforage.setItem(appName, cache, function(){
-                    log('cache updated');
-                });
+            localforage.setItem(appName, cache, function(){
+                log('cache updated');
+            });
         });
     }
 
@@ -7094,7 +7095,7 @@ module.exports = function(config){
             promisedFiles[key].resolve(downloadedFiles[key]);
         });
         log('Preparing to seed.');
-        isCacheOutdated(promisedRequest(path + 'package.json')).then(function(outdated){
+        isCacheOutdated(downloadedFiles['package.json']).then(function(outdated){
             if(outdated){
                 updateCache(downloadedFiles);
             }
