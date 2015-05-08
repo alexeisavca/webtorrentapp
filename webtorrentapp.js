@@ -6990,6 +6990,7 @@ module.exports = function(config){
     var path = config.path || '';
     var seedTimeoutMs = config.seedTimeout || 5000;
     var appName = config.name || 'Just another WebTorrent app';
+    var restoreFromCache = "boolean" == typeof config.restoreFromCache ? config.restoreFromCache : true;
 
     var promisedFiles = {};
     appFiles.forEach(function(file){
@@ -7036,13 +7037,17 @@ module.exports = function(config){
         })
     }
 
-    log("Checking cache");
-    localforage.getItem(appName).then(function(cache){
-        Object.keys(cache).forEach(function(key){
-            promisedFiles[key].resolve(cache[key])
-        });
-        log("Successfully restored from cache")
-    }).catch(log.bind(log, "Restoring from cache failed"));
+    if(restoreFromCache){
+        log("Checking cache");
+        localforage.getItem(appName).then(function(cache){
+            Object.keys(cache).forEach(function(key){
+                promisedFiles[key].resolve(cache[key])
+            });
+            log("Successfully restored from cache")
+        }).catch(log.bind(log, "Restoring from cache failed"));
+    } else {
+        log("Restoring from cache disabled by developer. Skipping");
+    }
 
 
     function isCacheOutdated(packageJsonPromise){
