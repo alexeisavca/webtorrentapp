@@ -6986,8 +6986,7 @@ function extractModuleExports(script){
 
 module.exports = function(config){
     var appFiles = ['package.json', 'index.js'].concat(config.files || []);
-    var appMainFunc = config.mainFunc || 'webtorrentApp';
-    var cacheableFiles = ['package.json', 'index.js'].concat(config.cache || []);
+    var cacheFiles = ['package.json', 'index.js'].concat(config.cache || []);
     var path = config.path || '';
     var seedTimeoutMs = config.seedTimeout || 5000;
     var appName = config.name || 'Just another WebTorrent app';
@@ -7058,6 +7057,23 @@ module.exports = function(config){
         return deferred.promise;
     }
 
+    function updateCache(filePromises){
+        log("Updating cache");
+        var cache = {};
+        cacheFiles.forEach(function(name){
+            requestText(name).then(function(content){
+                cache[name] = content;
+            });
+        });
+        Q.all(cacheFiles.map(function(name){
+            return filePromises[name];
+        })).then(function(){
+                localforage.setItem(appName, cache, function(){
+                    log('cache updated');
+                });
+        });
+    }
+
 
     var client = new WebTorrent();
 
@@ -7066,20 +7082,22 @@ module.exports = function(config){
             client.remove(config.torrent);
         }
         torrentPromise = null;
-        log('Preparing to seed.');
-        isCacheOutdated(promisedRequest(path + 'package.json')).then(function(outdated){
-            if(outdated){
-                log('will update');
-            }
-        });
         var fileNames = Object.keys(promisedFiles);
         var totalFiles = 0;
+        var downloadedFiles = {};
         fileNames.forEach( function(key){
-            promisedFiles[key].resolve(promisedRequest(path + key));
-            promisedFiles[key].promise.then(function(){
+            downloadedFiles[key] = promisedRequest(path + key);
+            downloadedFiles[key].then(function(){
                 totalFiles++;
                 log('Downloaded file ' + totalFiles + ' out of ' + appFiles.length, key);
             });
+            promisedFiles[key].resolve(downloadedFiles[key]);
+        });
+        log('Preparing to seed.');
+        isCacheOutdated(promisedRequest(path + 'package.json')).then(function(outdated){
+            if(outdated){
+                updateCache(downloadedFiles);
+            }
         });
 
         Q.all(fileNames.map(function(key){
