@@ -38,17 +38,19 @@ module.exports = function(config){
                     stream.on('end', function(){
                         deferred.resolve(content);
                     });
-                    break;
+                    return;
                 }
             }
+            deferred.reject("File not found");
         });
         return deferred.promise;
     }
 
     function requestText(filename){
         if(torrentPromise){
-            promisedFiles[filename].resolve(downloadTextFile(filename));
-
+            torrentPromise.promise.then(function(){
+                downloadTextFile(filename).then(promisedFiles[filename].resolve);
+            });
         }
         return promisedFiles[filename].promise;
     }
@@ -73,11 +75,9 @@ module.exports = function(config){
         var deferred = Q.defer();
         Q.all([localforage.getItem(appName), packageJsonPromise]).then(function(results){
             var currentPackageJson = JSON.parse(results[0]['package.json']);
-            var currentVersion = parseFloat(currentPackageJson.version);
             var maybeNewerPackageJson = JSON.parse(results[1]);
-            var maybeNewerVersion = parseFloat(maybeNewerPackageJson.version);
 
-            deferred.resolve(maybeNewerVersion > currentVersion);
+            deferred.resolve(maybeNewerPackageJson.version > currentPackageJson.version);
         }).fail(function(){
             deferred.resolve(true)
         });
@@ -87,9 +87,9 @@ module.exports = function(config){
     function updateCache(filePromises){
         log("Updating cache");
         var cache = {};
-        cacheFiles.forEach(function(name){
-            requestText(name).then(function(content){
-                cache[name] = content;
+        cacheFiles.forEach(function(filename){
+            filePromises[filename].then(function(content){
+                cache[filename] = content;
             });
         });
         Q.all(cacheFiles.map(function(name){
@@ -113,12 +113,13 @@ module.exports = function(config){
         var totalFiles = 0;
         var downloadedFiles = {};
         fileNames.forEach( function(key){
-            downloadedFiles[key] = promisedRequest(path + key);
-            downloadedFiles[key].then(function(){
+            downloadedFiles[key] = promisedRequest(path + key)
+            downloadedFiles[key].then(function(content){
                 totalFiles++;
                 log('Downloaded file ' + totalFiles + ' out of ' + appFiles.length, key);
             });
-            promisedFiles[key].resolve(downloadedFiles[key]);
+            downloadedFiles[key].then(promisedFiles[key].resolve);
+
         });
         log('Preparing to seed.');
         isCacheOutdated(downloadedFiles['package.json']).then(function(outdated){
@@ -127,8 +128,8 @@ module.exports = function(config){
             }
         });
 
-        Q.all(fileNames.map(function(key){
-            return promisedFiles[key].promise;
+        Q.all(fileNames.map(function(name){
+            return downloadedFiles[name];
         })).then(function(files){
             log('All files have been downloaded. Attempting to seed.');
             try{
@@ -157,6 +158,20 @@ module.exports = function(config){
             clearTimeout(seedTimeout);
             torrentPromise.resolve(torrent);
             log('Connected!');
+            isCacheOutdated(downloadTextFile('package.json')).then(function(outdated){
+                if(outdated){
+                    var downloadedFiles = {};
+                    var totalFiles = 0;
+                    cacheFiles.forEach( function(filename){
+                        downloadedFiles[filename] = downloadTextFile(filename);
+                        downloadedFiles[filename].then(function(){
+                            totalFiles++;
+                            log('Downloaded file ' + totalFiles + ' out of ' + cacheFiles.length, filename);
+                        });
+                    });
+                    updateCache(downloadedFiles);
+                }
+            });
         });
     } else {
         clearTimeout(seedTimeout);
