@@ -6985,8 +6985,8 @@ function extractModuleExports(script){
 }
 
 module.exports = function(config){
-    var appFiles = ['package.json', 'index.js'].concat(config.files || []);
-    var cacheFiles = ['package.json', 'index.js'].concat(config.cache || []);
+    var appFiles = ['index.js'].concat(config.files || []);
+    var cacheFiles = ['index.js'].concat(config.cache || []);
     var path = config.path || '';
     var seedTimeoutMs = config.seedTimeout || 5000;
     var appName = config.name || 'Just another WebTorrent app';
@@ -7049,8 +7049,8 @@ module.exports = function(config){
     if(restoreFromCache){
         log("Checking cache");
         localforage.getItem(appName).then(function(cache){
-            Object.keys(cache).forEach(function(filename){
-                promisedFiles[filename].resolve(new Buffer(cache[filename]))
+            Object.keys(cache.files).forEach(function(filename){
+                promisedFiles[filename].resolve(new Buffer(cache.files[filename]))
             });
             log("Successfully restored from cache")
         }).catch(log.bind(log, "Restoring from cache failed"));
@@ -7059,20 +7059,17 @@ module.exports = function(config){
     }
 
 
-    function isCacheOutdated(packageJsonPromise){
+    function isCacheOutdated(torrentId){
         var deferred = Q.defer();
-        Q.all([localforage.getItem(appName), packageJsonPromise]).then(function(results){
-            var currentPackageJson = JSON.parse(results[0]['package.json']);
-            var maybeNewerPackageJson = JSON.parse(results[1]);
-
-            deferred.resolve(maybeNewerPackageJson.version > currentPackageJson.version);
-        }).fail(function(){
+        localforage.getItem(appName).then(function(cache){
+            deferred.resolve(cache.torrentId != torrentId);
+        }).catch(function(){
             deferred.resolve(true)
         });
         return deferred.promise;
     }
 
-    function updateCache(filePromises){
+    function updateCache(filePromises, torrentId){
         log("Updating cache");
         var cache = {};
         cacheFiles.forEach(function(filename){
@@ -7083,7 +7080,10 @@ module.exports = function(config){
         Q.all(cacheFiles.map(function(name){
             return filePromises[name];
         })).then(function(){
-            localforage.setItem(appName, cache, function(){
+            localforage.setItem(appName, {
+                torrentId: torrentId,
+                files: cache
+            }, function(){
                 log('cache updated');
             });
         });
@@ -7110,11 +7110,6 @@ module.exports = function(config){
 
         });
         log('Preparing to seed.');
-        isCacheOutdated(downloadedFiles['package.json']).then(function(outdated){
-            if(outdated){
-                updateCache(downloadedFiles);
-            }
-        });
 
         Q.all(fileNames.map(function(name){
             return downloadedFiles[name];
@@ -7129,6 +7124,11 @@ module.exports = function(config){
                     name: appName
                 }, function(torrent){
                     log('Successfully started seeding. Infohash: %c%s %cMagnet: %c%s', 'color: blue', torrent.infoHash, 'color:black', 'color:blue', torrent.magnetURI);
+                    isCacheOutdated(torrent.infoHash).then(function(outdated){
+                        if(outdated){
+                            updateCache(downloadedFiles, torrent.infoHash);
+                        }
+                    });
                 });
             }catch(e){
                 log('Oops!', e);
@@ -7150,7 +7150,7 @@ module.exports = function(config){
                 return;
             }
             log('Connected!');
-            isCacheOutdated(requestFile('package.json')).then(function(outdated){
+            isCacheOutdated(torrent.infoHash).then(function(outdated){
                 if(outdated){
                     var downloadedFiles = {};
                     var totalFiles = 0;
@@ -7161,7 +7161,7 @@ module.exports = function(config){
                             log('Downloaded file ' + totalFiles + ' out of ' + cacheFiles.length, filename);
                         });
                     });
-                    updateCache(downloadedFiles);
+                    updateCache(downloadedFiles, torrent.infoHash);
                 }
             });
         });
