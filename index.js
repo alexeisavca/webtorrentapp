@@ -63,12 +63,43 @@ module.exports = function(config){
         return promise.promise;
     }
 
+    function requestExternalStyle(url){
+        var ss = document.createElement("link");
+        ss.type = "text/css";
+        ss.rel = "stylesheet";
+        ss.href = url;
+        document.head.appendChild(ss);
+    }
+
+    function requestExternalScript(url){
+        var ss = document.createElement("script");
+        ss.src = url;
+        document.head.appendChild(ss);
+    }
+
+    function requestStyle(filename){
+        return requestBlobUrl(filename).then(requestExternalStyle);
+    }
+
+    function requestScript(filename){
+        return requestBlobUrl(filename).then(requestExternalScript);
+    }
+
+    function requestModule(filename){
+        return requestFile(filename).then(extractModuleExports);
+    }
+
     function launchApp(script){
         var f = extractModuleExports(script);
         f({
             requestFile: requestFile,
             requestBlobUrl: requestBlobUrl,
-            requestStream: requestStream
+            requestStream: requestStream,
+            requestExternalStyle: requestExternalStyle,
+            requestExternalScript: requestExternalScript,
+            requestStyle: requestStyle,
+            requestScript: requestScript,
+            requestModule: requestModule
         })
     }
 
