@@ -5,6 +5,8 @@ var localforage = require('localforage');
 var Q = require('q');
 var debug = require('debug');
 var log = debug('webtorrentapp');
+var FileStream = require('webtorrent/lib/file-stream');
+var ReadableStream = require('stream').Readable;
 
 function extractModuleExports(script){
     return eval.call(window, '(function(module){' + script + ';return module.exports})({})');
@@ -60,6 +62,13 @@ module.exports = function(config){
                 promise.resolve(findFileInTorrent(filename, torrent).createReadStream())
             })
         }
+        requestFile(filename).then(function(file){
+            var stream = ReadableStream();
+            stream.push(file);
+            stream.push(null);
+            stream.pipe = FileStream.prototype.pipe.bind(stream);
+            promise.resolve(stream);
+        });
         return promise.promise;
     }
 

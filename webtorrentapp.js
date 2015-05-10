@@ -6979,6 +6979,8 @@ var localforage = require('localforage');
 var Q = require('q');
 var debug = require('debug');
 var log = debug('webtorrentapp');
+var FileStream = require('webtorrent/lib/file-stream');
+var ReadableStream = require('stream').Readable;
 
 function extractModuleExports(script){
     return eval.call(window, '(function(module){' + script + ';return module.exports})({})');
@@ -7034,6 +7036,13 @@ module.exports = function(config){
                 promise.resolve(findFileInTorrent(filename, torrent).createReadStream())
             })
         }
+        requestFile(filename).then(function(file){
+            var stream = ReadableStream();
+            stream.push(file);
+            stream.push(null);
+            stream.pipe = FileStream.prototype.pipe.bind(stream);
+            promise.resolve(stream);
+        });
         return promise.promise;
     }
 
@@ -7204,7 +7213,7 @@ module.exports = function(config){
 
     requestFile('index.js').then(launchApp);
 };
-},{"./lib/promised-request.js":35,"buffer/":36,"debug":40,"localforage":49,"q":51,"webtorrent":52}],35:[function(require,module,exports){
+},{"./lib/promised-request.js":35,"buffer/":36,"debug":40,"localforage":49,"q":51,"stream":28,"webtorrent":52,"webtorrent/lib/file-stream":53}],35:[function(require,module,exports){
 var Q = require('q');
 var Buffer = require('buffer/').Buffer;
 function toBuffer(ab) {
@@ -12297,6 +12306,7 @@ inherits(FileStream, stream.Readable)
  * @param {number} opts.pieceLength length of an individual piece
  */
 function FileStream (file, opts) {
+  console.log(file);
   var self = this
   if (!(self instanceof FileStream)) return new FileStream(file, opts)
   stream.Readable.call(self, opts)
