@@ -167,9 +167,46 @@ wtapi.requestStream("song.url").then(function(stream){
 the *requestStream* function returns an instance of a subclass of [Node's stream.Readable](https://nodejs.org/api/stream.html#stream_class_stream_readable) and you can use it to stream any types of files. This subclass also implements a pipe functions that allows you to stream not only to other streams, but to &lt;audio&gt; and &lt;video&gt; tags, using the [MediaSource](https://developer.mozilla.org/ro/docs/Web/API/MediaSource) API. Keep in mind that this API is not yet fully supported, for example, it won't work in Firefox, and I had a really hard time looking for a webm file that Chrome would actually accept to stream, so I'd advise you foresee a blob url fallback for piping into &lt;audio&gt; and &lt;video&gt;, because blobs work everytime everywhere. 
 
 ## Examples
-Check the /example/ folder of this project
+Check the /example/ folder of this project. You should open the index.html files via a local server, not file:///, otherwise it won't be able to fetch the files for seeding in case it finds no peers.
 
 ## API
+### Initialization
+```js
+WebtorrentApp({
+    torrent: 'c56794f957feff43fee1a24c274dc856a06d6fa7',//the infohash, magnet or a URL of a .torrent file. If missing, will start seeding without timeout
+    files: ['something.js', 'something.mp3'], //a list of your app's files, needed when seeding
+    cache: ['something.js'],//the subset of files to cache in the browser storage. Default: none
+    path: 'app/',//a URL, relative of absolute path to the location of the app files, needed for seeding
+    seedTimeout: 5000,//how long to wait for the torrent to start downloading before giving up and starting seeding. Default: 5000 ms
+    name: 'Just another WebTorrent app',//the name of your app. Default: "Just another WebTorrent app"
+    restoreFromCache: true//whether to restore the app from inbrowser cache. Default: true
+})
+```
+
+### WTAPI
+####requestFile(filename)
+Returns a promise that will resolve with a [Buffer](https://www.npmjs.com/package/buffer) containing the binary data of the file. The buffer can be casted to string, if needed.
+
+####requestBlobUrl(filename)
+Returns a promise that will resolve with the file's blob URL
+
+####requestStream(filename)
+Returns a [Node stream.Readable](https://nodejs.org/api/stream.html#stream_class_stream_readable) with a special *pipe()* method that allows piping not only to another streams but also to &lt;audio&gt; and &lt;video&gt; tags via [MediaSource](https://developer.mozilla.org/ro/docs/Web/API/MediaSource)
+
+####requestExternalStyle(urlOrBlob)
+Utility method. Injects a &lt;link rel="stylesheet"/&gt; tag with the provided URL
+
+####requestExternalScript(urlOrBlob)
+Utility method. Injects a &lt;script&gt; tag with the provided URL
+
+####requestStyle(filename)
+Reads the file from the torrent and injects a &lt;link rel="stylesheet"/&gt; tag with its blob URL. Returns a promise that resolves when the style is injected.
+
+####requestScript(filename)
+Reads the file from the torrent and injects a &lt;script&gt; tag with its blob URL. Returns a promise that resolves when the script is injected.
+
+####requestModule(filename)
+Reads the file from the torrent and evals it in global context. Returns a promise which resolves with the values of module's *module.exports*
 
 ## Please read
 ![Please read](http://lurkmore.so/images/d/d1/Please_Read.jpg)  
