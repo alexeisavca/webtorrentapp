@@ -141,7 +141,7 @@ Refresh *dev.html* in the browser, copy the infohash, replace the old infohash i
 <video src="blob:http%3A//localhost%3A63342/1c6467aa-f183-4f09-a146-ff5e52b7267a"/>
 <audio src="blob:http%3A//localhost%3A63342/1c6467aa-f183-4f09-a146-ff5e52b7267a"/>
 ```
-Speaking of <audio>, let's make our app play some music! As you've probably figured out, in order to do this, we'd add song.mp3 to the *app/* folder, and to the files list in *dev.html,* and in *index.js* we could write something like this:
+Speaking of &lt;audio&gt;, let's make our app play some music! As you've probably figured out, in order to do this, we'd add song.mp3 to the *app/* folder, and to the files list in *dev.html,* and in *index.js* we could write something like this:
 ```js
 wtapi.requestBlobUrl("song.url").then(function(url){
     var audio = document.createElement("audio");
@@ -161,7 +161,7 @@ wtapi.requestStream("song.url").then(function(stream){
     stream.pipe(audio);
 });
 ```
-the *requestStream* function returns an instance of a subclass of [Node's stream.Readable](https://nodejs.org/api/stream.html#stream_class_stream_readable) and you can use it to stream any types of files. This subclass also implements a pipe functions that allows you to stream not only to other streams, but to <audio> and <video> tags, using the [MediaSource](https://developer.mozilla.org/ro/docs/Web/API/MediaSource) API. Keep in mind that this API is not yet fully supported, for example, it won't work in Firefox, and I had a really hard time looking for a webm file that Chrome would actually accept to stream, so I'd advise you foresee a blob url fallback for piping into <audio> and <video>, because blobs work everytime everywhere. 
+the *requestStream* function returns an instance of a subclass of [Node's stream.Readable](https://nodejs.org/api/stream.html#stream_class_stream_readable) and you can use it to stream any types of files. This subclass also implements a pipe functions that allows you to stream not only to other streams, but to &lt;audio&gt; and &lt;video&gt; tags, using the [MediaSource](https://developer.mozilla.org/ro/docs/Web/API/MediaSource) API. Keep in mind that this API is not yet fully supported, for example, it won't work in Firefox, and I had a really hard time looking for a webm file that Chrome would actually accept to stream, so I'd advise you foresee a blob url fallback for piping into &lt;audio&gt; and &lt;video&gt;, because blobs work everytime everywhere. 
 
 ## Examples
 Check the /example/ folder of this project
