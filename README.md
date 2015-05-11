@@ -141,7 +141,7 @@ Refresh *dev.html* in the browser, copy the infohash, replace the old infohash i
 <video src="blob:http%3A//localhost%3A63342/1c6467aa-f183-4f09-a146-ff5e52b7267a"/>
 <audio src="blob:http%3A//localhost%3A63342/1c6467aa-f183-4f09-a146-ff5e52b7267a"/>
 ```
-As you've probably figured out, in order to do this, we'd add song.mp3 to the *app/* folder, and to the files list in *dev.html,* and in *index.js* we could write something like this:
+Speaking of <audio>, let's make our app play some music! As you've probably figured out, in order to do this, we'd add song.mp3 to the *app/* folder, and to the files list in *dev.html,* and in *index.js* we could write something like this:
 ```js
 wtapi.requestBlobUrl("song.url").then(function(url){
     var audio = document.createElement("audio");
