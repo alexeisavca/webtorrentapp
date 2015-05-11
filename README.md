@@ -5,6 +5,9 @@ Webtorrent App allows you to launch web apps(SPAs) from [webtorrents.](https://g
 1. It allows you to build *insanely* huge apps. Think gigabytes.
 2. It decreases the server load, since your users will be downloading the files from other users, not from your server.
 3. It's decentralized and, in fact, webtorrent apps can work with no server at all.
+ 
+## How exactly does it work?
+Webtorrentapp will attempt to download and launch the torrent you provided, if it fails, it will fetch your application's files via XHR and start seeding. Also, since connecting to the torrent and peers can last for a couple of seconds, it provides cache in order to launch your app instantly. It also provides the necessary level of abstraction so that you can ignore whether your app was loaded from a torrent, XHR or cache.
 
 ## Tutorial
 Get webtorrentapp
