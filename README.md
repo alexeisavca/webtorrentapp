@@ -72,7 +72,7 @@ module.exports = function(wtapi){
 
 Now open *dev.html* in a browser, keep in mind that you have to access it via localhost, otherwise it won't be able to fetch the files in order to start seeding. Webtorrentapp uses [debug](https://www.npmjs.com/package/debug) for logging, so open up the console and run this:
 ```js
-localStorage.debug = "webtorrent"
+localStorage.debug = "webtorrentapp"
 ```
 because the log will output the torrent data that'll you'll need on the client. Refresh the page and you should see an output like this:
 ```
