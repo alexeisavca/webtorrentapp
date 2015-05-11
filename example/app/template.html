@@ -1,0 +1,44 @@
+<div class="row">
+    <div class="col-md-4"></div>
+    <div class="col-md-4"></div>
+    <div class="col-md-4"></div>
+</div>
+<table class="table">
+    <thead>
+    <tr>
+        <th>Code</th>
+        <th>Do it</th>
+        <th>Result</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td class="col-md-4">
+            <code>
+                wtapi.requestFile('lipsum.txt').then(function(content){<br/>
+                &nbsp;&nbsp;&nbsp;&nbsp;document.getElementById('the-text').innerHTML = content;<br/>
+                })
+            </code>
+        </td>
+        <td class="col-md-4">
+            <button class="btn" id="load-text">Load text</button>
+        </td>
+        <td id="the-text" class="col-md-4"></td>
+    </tr>
+    <tr>
+        <td class="col-md-4">
+            <code>
+                wtapi.requestBlobUrl('example_image.png').then(function(url){<br/>
+                &nbsp;&nbsp;&nbsp;&nbsp;document.getElementById('the-image').src = url;<br/>
+                })
+            </code>
+        </td>
+        <td class="col-md-4">
+            <button class="btn" id="load-image">Load image</button>
+        </td>
+        <td class="col-md-4">
+            <img src="" alt="" id="the-image"/>
+        </td>
+    </tr>
+    </tbody>
+</table>

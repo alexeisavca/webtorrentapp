@@ -6988,7 +6988,7 @@ function extractModuleExports(script){
 
 module.exports = function(config){
     var appFiles = ['index.js'].concat(config.files || []);
-    var cacheFiles = ['index.js'].concat(config.cache || []);
+    var cacheFiles = config.cache;
     var path = config.path || '';
     var seedTimeoutMs = config.seedTimeout || 5000;
     var appName = config.name || 'Just another WebTorrent app';
