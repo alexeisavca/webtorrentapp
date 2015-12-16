@@ -12,7 +12,7 @@ Webtorrentapp will attempt to download and launch the torrent you provided, if i
 ## Tutorial
 Get webtorrentapp
 ```
-npm install webtorrent
+npm install webtorrentapp
 ```
 
 Create two files:
