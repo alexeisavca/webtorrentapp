@@ -184,28 +184,28 @@ WebtorrentApp({
 ```
 
 ### WTAPI
-####requestFile(filename)
+#### requestFile(filename)
 Returns a promise that will resolve with a [Buffer](https://www.npmjs.com/package/buffer) containing the binary data of the file. The buffer can be casted to string, if needed.
 
-####requestBlobUrl(filename)
+#### requestBlobUrl(filename)
 Returns a promise that will resolve with the file's blob URL
 
-####requestStream(filename)
+#### requestStream(filename)
 Returns a [Node stream.Readable](https://nodejs.org/api/stream.html#stream_class_stream_readable) with a special *pipe()* method that allows piping not only to another streams but also to &lt;audio&gt; and &lt;video&gt; tags via [MediaSource](https://developer.mozilla.org/ro/docs/Web/API/MediaSource)
 
-####requestExternalStyle(urlOrBlob)
+#### requestExternalStyle(urlOrBlob)
 Utility method. Injects a &lt;link rel="stylesheet"/&gt; tag with the provided URL
 
-####requestExternalScript(urlOrBlob)
+#### requestExternalScript(urlOrBlob)
 Utility method. Injects a &lt;script&gt; tag with the provided URL
 
-####requestStyle(filename)
+#### requestStyle(filename)
 Reads the file from the torrent and injects a &lt;link rel="stylesheet"/&gt; tag with its blob URL. Returns a promise that resolves when the style is injected.
 
-####requestScript(filename)
+#### requestScript(filename)
 Reads the file from the torrent and injects a &lt;script&gt; tag with its blob URL. Returns a promise that resolves when the script is injected.
 
-####requestModule(filename)
+#### requestModule(filename)
 Reads the file from the torrent and evals it in global context. Returns a promise which resolves with the values of module's *module.exports*
 
 ## Please read
